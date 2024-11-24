@@ -6,7 +6,7 @@ echo_italic()
   echo -e "\e[3m$@\e[0m"
 }
 
-help()
+print_help()
 {
   echo Usage:	linkrr COMMAND [POSITIONAL_ARGUMENTS]
   echo Commands:
@@ -30,7 +30,7 @@ help()
 {
   # Show Help menu action
   if [ "$command" = "help" ] || [ $# -eq 0 ]; then
-    help
+    print_help
     exit 0
   fi
 }
