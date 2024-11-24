@@ -1,0 +1,108 @@
+#!/bin/bash
+
+# Functions
+echo_italic()
+{
+  echo -e "\e[3m$@\e[0m"
+}
+
+help()
+{
+  echo Usage:	linkrr COMMAND [POSITIONAL_ARGUMENTS]
+  echo Commands:
+  echo -e "  inspect\tInspect existing hardlinks between two folders."
+  echo -e "  mirror\tMirrors hardlinks between two folders into two destination folders while correcting link targets."
+  echo -e "  help\t\tPrints this help menu."
+
+  echo Usages:
+  echo -n "  inspect "; echo_italic "SOURCE_FILES_FOLDER SOURCE_LINKS_FOLDER"
+  echo -n "  mirror "; echo_italic "SOURCE_FILES_FOLDER SOURCE_LINKS_FOLDER DESTINATION_FILES_FOLDER DESTINATION_LINKS_FOLDER"
+  echo -e "  help"
+}
+
+args_error()
+{
+  echo -e "Missing or too many arguments. Check the usages by running 'linkrr help'."
+  exit 0
+}
+
+help()
+{
+  # Show Help menu action
+  if [ "$command" = "help" ] || [ $# -eq 0 ]; then
+    help
+    exit 0
+  fi
+}
+
+mirror()
+{
+  # Show error message if incorrect number of parameters was entered
+  if [ $# -ne 5 ]; then
+    args_error
+  fi
+
+  # Parse positional parameters
+  SRC_FILES_FOLDER=$2
+  SRC_LINKS_FOLDER=$3
+  DST_FILES_FOLDER=$4
+  DST_LINKS_FOLDER=$5
+
+  # Output the parameters for now.
+  echo -e "$SRC_FILES_FOLDER"
+  echo -e "$SRC_LINKS_FOLDER"
+  echo -e "$DST_FILES_FOLDER"
+  echo -e "$DST_LINKS_FOLDER"
+
+  #TODO: Most of the logic for finding files to create will be in inspect(), implement that first.
+  # Then just implement the same generic logic but apply it to create the new hardlinks.
+  # We don't delete anything or overwrite anything, rather be safe than sorry approach.
+}
+
+inspect()
+{
+  if [ $# -ne 3 ]; then
+    args_error
+  fi
+
+  # Parse positional parameters
+  SRC_FILES_FOLDER=$2
+  SRC_LINKS_FOLDER=$3
+  DST_FILES_FOLDER=$3
+
+  # Output the parameters for now.
+  echo -e "$SRC_FILES_FOLDER"
+  echo -e "$SRC_LINKS_FOLDER"
+  echo -e "$DST_FILES_FOLDER"
+
+  #TODO: Find the "samefile" between destination and source that will be affected,
+  # by listing all files in source folder and looking for an equivalent in the dst
+  # Use to store finding results:
+  # RESULT=$(find DST_FOLDER -xdev -samefile SRC_FILE)
+  # Check found/matching with:
+  # [ -z "${RESULT}" ]; then SOMETHING; fi
+  # Then output all the files matching / found. This tells us what the new hardlinks would be.
+  # We should also find the HARDLINK<=>SRC_FILE link so we can reuse the same name and location (relative to the SRC_LINKS_FOLDER) to mirror.
+  # This should output a "what we're going to do / create" kind of view.
+}
+
+main()
+{
+  # Args Validation
+  command=$1
+
+  case "$command" in
+    mirror) mirror $@;;
+    inspect) inspect $@;;
+    help) help;;
+  esac
+}
+
+# Program Execution
+cat << EOF
+*********************
+|      Linkrr       |
+*********************
+EOF
+
+main $@
