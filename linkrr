@@ -1,5 +1,11 @@
 #!/bin/bash
 
+#Global variables
+RED='\033[1;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
 # Functions
 echo_italic()
 {
@@ -15,7 +21,7 @@ print_help()
   echo -e "  help\t\tPrints this help menu."
 
   echo Usages:
-  echo -n "  inspect "; echo_italic "SOURCE_FILES_FOLDER SOURCE_LINKS_FOLDER"
+  echo -n "  inspect "; echo_italic "SOURCE_FILES_FOLDER SOURCE_LINKS_FOLDER DESTINATION_FILES_FOLDER DESTINATION_LINKS_FOLDER"
   echo -n "  mirror "; echo_italic "SOURCE_FILES_FOLDER SOURCE_LINKS_FOLDER DESTINATION_FILES_FOLDER DESTINATION_LINKS_FOLDER"
   echo -e "  help"
 }
@@ -35,6 +41,28 @@ help()
   fi
 }
 
+iterate_links()
+{
+  local SRC_FILES_FOLDER=${1%/}
+  local SRC_LINKS_FOLDER=${2%/}
+  local DST_FILES_FOLDER=${3%/}
+  local DST_LINKS_FOLDER=${4%/}
+  HARDLINKS=()
+  while IFS=  read -r -d $'\0'; do
+      HARDLINKS+=("$REPLY")
+  done < <(find $SRC_LINKS_FOLDER -type f -links +1 -print0)
+
+  for LINK in "${HARDLINKS[@]}"
+  do
+    OIFS="$IFS"
+    IFS=$'\n'
+    ABS_TARGET=`find $SRC_FILES_FOLDER -samefile $LINK`
+    REL_TARGET=$(echo "${ABS_TARGET/${SRC_FILES_FOLDER}\//}")
+    REL_LINK=$(echo "${LINK/${SRC_LINKS_FOLDER}\//}")
+    "$5" "${SRC_FILES_FOLDER}" "${SRC_LINKS_FOLDER}" "${DST_FILES_FOLDER}" "${DST_LINKS_FOLDER}" "${REL_TARGET}" "${REL_LINK}"
+  done
+}
+
 mirror()
 {
   # Show error message if incorrect number of parameters was entered
@@ -43,47 +71,75 @@ mirror()
   fi
 
   # Parse positional parameters
-  SRC_FILES_FOLDER=$2
-  SRC_LINKS_FOLDER=$3
-  DST_FILES_FOLDER=$4
-  DST_LINKS_FOLDER=$5
+  local SRC_FILES_FOLDER=${2%/}
+  local SRC_LINKS_FOLDER=${3%/}
+  local DST_FILES_FOLDER=${4%/}
+  local DST_LINKS_FOLDER=${5%/}
 
-  # Output the parameters for now.
-  echo -e "$SRC_FILES_FOLDER"
-  echo -e "$SRC_LINKS_FOLDER"
-  echo -e "$DST_FILES_FOLDER"
-  echo -e "$DST_LINKS_FOLDER"
+  echo -e "${GREEN}Creating hardlinks in $DST_LINKS_FOLDER with targets pointing to $DST_FILES_FOLDER${NC}"
+  iterate_links $SRC_FILES_FOLDER $SRC_LINKS_FOLDER $DST_FILES_FOLDER $DST_LINKS_FOLDER mirror_link
+}
 
-  #TODO: Most of the logic for finding files to create will be in inspect(), implement that first.
-  # Then just implement the same generic logic but apply it to create the new hardlinks.
-  # We don't delete anything or overwrite anything, rather be safe than sorry approach.
+mirror_link()
+{
+  local SRC_FILES_FOLDER=${1%/}
+  local SRC_LINKS_FOLDER=${2%/}
+  local DST_FILES_FOLDER=${3%/}
+  local DST_LINKS_FOLDER=${4%/}
+  local REL_TARGET=${5}
+  local REL_LINK=${6}
+
+  local ABS_NEW_LINK="${DST_LINKS_FOLDER}/${REL_LINK}"
+  local ABS_NEW_TARGET="${DST_FILES_FOLDER}/${REL_TARGET}"
+
+
+  echo ${REL_LINK}
+  # Skip existing files
+  if [ -e "${ABS_NEW_LINK}" ]; then
+    echo -e "${RED}Link already exists, overwrite not supported.${NC}"
+    return
+  fi
+
+  local NEW_LINK_DIR=$(dirname "${ABS_NEW_LINK}")
+
+  if [ ! -d "${NEW_LINK_DIR}" ]; then
+    mkdir -p -- "${NEW_LINK_DIR}"
+  fi
+
+  echo -e "  Link: ${ABS_NEW_LINK}"
+  echo -e "  Target: ${ABS_NEW_TARGET}"
+
+  ln "${ABS_NEW_TARGET}" "${ABS_NEW_LINK}"
+  echo ${ABS_NEW_LINK} >> linkrr_$(date +"%Y%m%d").log
+}
+
+print_link_changes()
+{
+  local SRC_FILES_FOLDER=${1%/}
+  local SRC_LINKS_FOLDER=${2%/}
+  local DST_FILES_FOLDER=${3%/}
+  local DST_LINKS_FOLDER=${4%/}
+  local REL_TARGET=${5}
+  local REL_LINK=${6}
+
+  echo -e "  ${RED}${SRC_LINKS_FOLDER}${NC}/${REL_LINK} -> ${RED}${SRC_FILES_FOLDER}${NC}/${REL_TARGET}"
+  echo -e "  ${GREEN}${DST_LINKS_FOLDER}${NC}/${REL_LINK} -> ${GREEN}${DST_FILES_FOLDER}${NC}/${REL_TARGET}"
 }
 
 inspect()
 {
-  if [ $# -ne 3 ]; then
+  if [ $# -ne 5 ]; then
     args_error
   fi
 
   # Parse positional parameters
-  SRC_FILES_FOLDER=$2
-  SRC_LINKS_FOLDER=$3
-  DST_FILES_FOLDER=$3
+  local SRC_FILES_FOLDER=${2%/}
+  local SRC_LINKS_FOLDER=${3%/}
+  local DST_FILES_FOLDER=${4%/}
+  local DST_LINKS_FOLDER=${5%/}
 
-  # Output the parameters for now.
-  echo -e "$SRC_FILES_FOLDER"
-  echo -e "$SRC_LINKS_FOLDER"
-  echo -e "$DST_FILES_FOLDER"
-
-  #TODO: Find the "samefile" between destination and source that will be affected,
-  # by listing all files in source folder and looking for an equivalent in the dst
-  # Use to store finding results:
-  # RESULT=$(find DST_FOLDER -xdev -samefile SRC_FILE)
-  # Check found/matching with:
-  # [ -z "${RESULT}" ]; then SOMETHING; fi
-  # Then output all the files matching / found. This tells us what the new hardlinks would be.
-  # We should also find the HARDLINK<=>SRC_FILE link so we can reuse the same name and location (relative to the SRC_LINKS_FOLDER) to mirror.
-  # This should output a "what we're going to do / create" kind of view.
+  echo Looking for hardlinks in $SRC_LINKS_FOLDER with targets pointing to $SRC_FILES_FOLDER
+  iterate_links $SRC_FILES_FOLDER $SRC_LINKS_FOLDER $DST_FILES_FOLDER $DST_LINKS_FOLDER print_link_changes
 }
 
 main()
